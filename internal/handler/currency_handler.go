@@ -6,18 +6,17 @@ import (
 	"strings"
 
 	"Currency-apiNew/internal/domain"
-	"Currency-apiNew/internal/service"
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
 
 type CurrencyHandler struct {
-	service *service.CurrencyService
+	service domain.CurrencyService
 	logger  *zap.Logger
 }
 
-func NewCurrencyHandler(service *service.CurrencyService, logger *zap.Logger) *CurrencyHandler {
+func NewCurrencyHandler(service domain.CurrencyService, logger *zap.Logger) domain.CurrencyHandler {
 	return &CurrencyHandler{
 		service: service,
 		logger:  logger,
@@ -28,6 +27,14 @@ func (h *CurrencyHandler) GetAllCurrencies(w http.ResponseWriter, r *http.Reques
 	h.logger.Debug("Обработка HTTP GET /currencies")
 
 	response := h.service.GetAllCurrencies()
+	//if err != nil {
+	//	h.logger.Error("ошибка при получении валют",
+	//		zap.Error(err),
+	//		zap.String("method", r.Method),
+	//		zap.String("path", r.URL.Path))
+	//	writeErrorResponse(w, http.StatusInternalServerError, "внутренняя ошибка сервера")
+	//	return
+	//}
 
 	h.logger.Debug("Отправка списка валют клиенту",
 		zap.Int("currencies_count", len(response.Currencies)))

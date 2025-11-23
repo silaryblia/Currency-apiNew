@@ -1,10 +1,9 @@
 package service
 
 import (
+	"Currency-apiNew/internal/domain"
 	"fmt"
 	"strings"
-
-	"Currency-apiNew/internal/domain"
 
 	"go.uber.org/zap"
 )
@@ -14,7 +13,9 @@ type CurrencyService struct {
 	logger *zap.Logger
 }
 
-func NewCurrencyService(repo domain.CurrencyRepository, logger *zap.Logger) *CurrencyService {
+func NewCurrencyService(repo domain.CurrencyRepository, logger *zap.Logger) domain.CurrencyService {
+	logger.Debug("Сервис: создание CurrencyService")
+
 	return &CurrencyService{
 		repo:   repo,
 		logger: logger,
@@ -24,12 +25,21 @@ func NewCurrencyService(repo domain.CurrencyRepository, logger *zap.Logger) *Cur
 func (s *CurrencyService) GetAllCurrencies() domain.CurrenciesListResponse {
 	s.logger.Debug("Получение всех валют (сервис)")
 
-	rates := s.repo.GetAll()
+	rates, err := s.repo.GetAll()
+	if err != nil {
+		s.logger.Error("Ошибка при получении всех валют", zap.Error(err))
+		// Возвращаем пустой список в случае ошибки
+		return domain.CurrenciesListResponse{
+			Currencies: []domain.CurrencyResponse{},
+			Count:      0,
+			Total:      0,
+		}
+	}
 
 	currencies := make([]domain.CurrencyResponse, 0, len(rates))
 	for code, rate := range rates {
 		currencies = append(currencies, domain.CurrencyResponse{
-			Code: strings.ToUpper(code),
+			Code: code,
 			Rate: rate,
 		})
 	}
@@ -47,11 +57,21 @@ func (s *CurrencyService) GetAllCurrencies() domain.CurrenciesListResponse {
 }
 
 func (s *CurrencyService) GetCurrency(code string) (*domain.CurrencyResponse, error) {
-	s.logger.Debug("Получение валюты (сервис)", zap.String("code", code))
+	s.logger.Debug("Получение валюты (сервис)",
+		zap.String("code", code))
 
-	rate, ok := s.repo.Get(code)
+	rate, ok, err := s.repo.Get(code)
+	if err != nil {
+		s.logger.Error("Ошибка БД при получении валюты",
+			zap.String("code", code), zap.Error(err))
+
+		return nil, domain.ErrDatabase
+	}
+
 	if !ok {
-		s.logger.Warn("Валюта не найдена (сервис)", zap.String("code", code))
+		s.logger.Warn("Валюта не найдена (сервис)",
+			zap.String("code", code))
+
 		return nil, domain.ErrCurrencyNotFound
 	}
 
@@ -70,14 +90,38 @@ func (s *CurrencyService) CreateCurrency(req domain.CreateCurrencyRequest) (*dom
 		zap.String("code", req.Code),
 		zap.Float64("rate", req.Rate))
 
+	// Валидация входных данных
 	if err := domain.Validate.Struct(req); err != nil {
 		s.logger.Warn("Ошибка валидации при создании валюты",
 			zap.String("code", req.Code),
 			zap.Error(err))
+
 		return nil, fmt.Errorf("ошибка валидации: %w", err)
 	}
 
-	s.repo.AddOrUpdate(req.Code, req.Rate)
+	// Проверяем существование валюты
+	exists, err := s.repo.Exists(req.Code)
+	if err != nil {
+		s.logger.Error("Ошибка БД при проверке существования валюты",
+			zap.String("code", req.Code), zap.Error(err))
+
+		return nil, domain.ErrDatabase
+	}
+
+	if exists {
+		s.logger.Warn("Попытка создать уже существующую валюту",
+			zap.String("code", req.Code))
+
+		return nil, domain.ErrDuplicateCurrency
+	}
+
+	// Сохраняем в репозиторий
+	if err := s.repo.AddOrUpdate(req.Code, req.Rate); err != nil {
+		s.logger.Error("Ошибка БД при создании валюты",
+			zap.String("code", req.Code), zap.Error(err))
+
+		return nil, domain.ErrDatabase
+	}
 
 	s.logger.Info("Валюта успешно создана (сервис)",
 		zap.String("code", req.Code),
@@ -94,19 +138,38 @@ func (s *CurrencyService) UpdateCurrency(code string, req domain.UpdateCurrencyR
 		zap.String("code", code),
 		zap.Float64("rate", req.Rate))
 
+	// Валидация входных данных
 	if err := domain.Validate.Struct(req); err != nil {
 		s.logger.Warn("Ошибка валидации при обновлении валюты",
 			zap.String("code", code),
 			zap.Error(err))
+
 		return nil, fmt.Errorf("ошибка валидации: %w", err)
 	}
 
-	if _, exists := s.repo.Get(code); !exists {
-		s.logger.Warn("Попытка обновить несуществующую валюту", zap.String("code", code))
+	// Проверяем существование валюты
+	exists, err := s.repo.Exists(code)
+	if err != nil {
+		s.logger.Error("Ошибка БД при проверке существования валюты",
+			zap.String("code", code), zap.Error(err))
+
+		return nil, domain.ErrDatabase
+	}
+
+	if !exists {
+		s.logger.Warn("Попытка обновить несуществующую валюту",
+			zap.String("code", code))
+
 		return nil, domain.ErrCurrencyNotFound
 	}
 
-	s.repo.AddOrUpdate(code, req.Rate)
+	// Обновляем в репозитории
+	if err := s.repo.AddOrUpdate(code, req.Rate); err != nil {
+		s.logger.Error("Ошибка БД при обновлении валюты",
+			zap.String("code", code), zap.Error(err))
+
+		return nil, domain.ErrDatabase
+	}
 
 	s.logger.Info("Валюта успешно обновлена (сервис)",
 		zap.String("code", code),
@@ -121,7 +184,15 @@ func (s *CurrencyService) UpdateCurrency(code string, req domain.UpdateCurrencyR
 func (s *CurrencyService) DeleteCurrency(code string) (*domain.SuccessResponse, error) {
 	s.logger.Debug("Удаление валюты (сервис)", zap.String("code", code))
 
-	deleted := s.repo.Delete(code)
+	// Бизнес-логика: пытаемся удалить
+	deleted, err := s.repo.Delete(code)
+	if err != nil {
+		s.logger.Error("Ошибка БД при удалении валюты",
+			zap.String("code", code), zap.Error(err))
+
+		return nil, domain.ErrDatabase
+	}
+
 	if !deleted {
 		s.logger.Warn("Попытка удалить несуществующую валюту", zap.String("code", code))
 		return nil, domain.ErrCurrencyNotFound

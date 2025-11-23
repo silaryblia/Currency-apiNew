@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"Currency-apiNew/internal/domain"
 	"net/http"
 	"time"
 
@@ -12,7 +13,7 @@ type HealthHandler struct {
 	logger *zap.Logger
 }
 
-func NewHealthHandler(logger *zap.Logger) *HealthHandler {
+func NewHealthHandler(logger *zap.Logger) domain.HealthHandler {
 	return &HealthHandler{
 		logger: logger,
 	}

@@ -1,9 +1,8 @@
 package repository
 
 import (
-	"sync"
-
 	"Currency-apiNew/internal/domain"
+	"sync"
 
 	"go.uber.org/zap"
 )
@@ -14,26 +13,29 @@ type CurrencyRepoInMemory struct {
 	logger *zap.Logger
 }
 
-func NewCurrencyRepoInMemory(logger *zap.Logger) domain.CurrencyRepository {
-	logger.Debug("Создание нового репозитория валют")
+func NewCurrencyRepoInMemory(defaultRates map[string]float64, logger *zap.Logger) domain.CurrencyRepository {
+	logger.Debug("Создание нового in-memory репозитория валют",
+		zap.Int("default_rates_count", len(defaultRates)))
+
+	rates := make(map[string]float64)
+	for k, v := range defaultRates {
+		rates[k] = v
+	}
 
 	return &CurrencyRepoInMemory{
-		rates: map[string]float64{
-			"usd": 80.00,
-			"eur": 85.00,
-			"aed": 20.00,
-		},
+		rates:  rates,
 		mu:     &sync.RWMutex{},
 		logger: logger,
 	}
 }
 
-func (repo *CurrencyRepoInMemory) GetAll() map[string]float64 {
+func (repo *CurrencyRepoInMemory) GetAll() (map[string]float64, error) {
 	repo.logger.Debug("Получение всех валют из репозитория")
 
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
 
+	// Копируем данные чтобы не менять оригинал
 	result := make(map[string]float64)
 	for k, v := range repo.rates {
 		result[k] = v
@@ -41,10 +43,11 @@ func (repo *CurrencyRepoInMemory) GetAll() map[string]float64 {
 
 	repo.logger.Debug("Успешно получены валюты",
 		zap.Int("count", len(result)))
-	return result
+
+	return result, nil
 }
 
-func (repo *CurrencyRepoInMemory) Get(code string) (float64, bool) {
+func (repo *CurrencyRepoInMemory) Get(code string) (float64, bool, error) {
 	repo.logger.Debug("Получение валюты из репозитория",
 		zap.String("code", code))
 
@@ -62,10 +65,10 @@ func (repo *CurrencyRepoInMemory) Get(code string) (float64, bool) {
 			zap.String("code", code))
 	}
 
-	return rate, exists
+	return rate, exists, nil
 }
 
-func (repo *CurrencyRepoInMemory) AddOrUpdate(code string, rate float64) {
+func (repo *CurrencyRepoInMemory) AddOrUpdate(code string, rate float64) error {
 	repo.logger.Info("Добавление/обновление валюты в репозитории",
 		zap.String("code", code),
 		zap.Float64("rate", rate))
@@ -90,9 +93,11 @@ func (repo *CurrencyRepoInMemory) AddOrUpdate(code string, rate float64) {
 	repo.logger.Debug("Валюта успешно сохранена",
 		zap.String("code", code),
 		zap.Float64("rate", rate))
+
+	return nil
 }
 
-func (repo *CurrencyRepoInMemory) Delete(code string) bool {
+func (repo *CurrencyRepoInMemory) Delete(code string) (bool, error) {
 	repo.logger.Info("Удаление валюты из репозитория",
 		zap.String("code", code))
 
@@ -104,10 +109,20 @@ func (repo *CurrencyRepoInMemory) Delete(code string) bool {
 		delete(repo.rates, code)
 		repo.logger.Info("Валюта успешно удалена",
 			zap.String("code", code))
-		return true
+
+		return true, nil
 	}
 
 	repo.logger.Warn("Попытка удалить несуществующую валюту",
 		zap.String("code", code))
-	return false
+
+	return false, nil
+}
+
+func (repo *CurrencyRepoInMemory) Exists(code string) (bool, error) {
+	repo.mu.RLock()
+	defer repo.mu.RUnlock()
+
+	_, exists := repo.rates[code]
+	return exists, nil
 }
