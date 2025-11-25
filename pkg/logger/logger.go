@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"Currency-apiNew/internal/config"
+	//"CurrencyApi-NEW-2/internal/config"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -10,17 +10,17 @@ import (
 var Logger *zap.Logger
 
 // Для обратной совместимости
-func InitLogger(cfg *config.LoggerConfig) error {
+func InitLogger(level, encoding string, development bool) error {
 	var zapConfig zap.Config
 
-	if cfg.Development {
+	if development {
 		zapConfig = zap.NewDevelopmentConfig()
 	} else {
 		zapConfig = zap.NewProductionConfig()
 	}
 
 	// Устанавливаем уровень логирования
-	switch cfg.Level {
+	switch level {
 	case "debug":
 		zapConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 	case "info":
@@ -34,7 +34,7 @@ func InitLogger(cfg *config.LoggerConfig) error {
 	}
 
 	// Настраиваем кодировку
-	if cfg.Encoding == "json" {
+	if encoding == "json" {
 		zapConfig.Encoding = "json"
 	} else {
 		zapConfig.Encoding = "console"

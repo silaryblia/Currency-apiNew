@@ -91,7 +91,7 @@ func (s *CurrencyService) CreateCurrency(req domain.CreateCurrencyRequest) (*dom
 		zap.Float64("rate", req.Rate))
 
 	// Валидация входных данных
-	if err := domain.Validate.Struct(req); err != nil {
+	if err := req.Validate(); err != nil {
 		s.logger.Warn("Ошибка валидации при создании валюты",
 			zap.String("code", req.Code),
 			zap.Error(err))
@@ -139,7 +139,7 @@ func (s *CurrencyService) UpdateCurrency(code string, req domain.UpdateCurrencyR
 		zap.Float64("rate", req.Rate))
 
 	// Валидация входных данных
-	if err := domain.Validate.Struct(req); err != nil {
+	if err := req.Validate(); err != nil {
 		s.logger.Warn("Ошибка валидации при обновлении валюты",
 			zap.String("code", code),
 			zap.Error(err))

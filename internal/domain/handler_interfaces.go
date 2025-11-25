@@ -2,8 +2,6 @@ package domain
 
 import (
 	"net/http"
-
-	"github.com/gorilla/mux"
 )
 
 // CurrencyHandler определяет интерфейс для HTTP обработчиков
@@ -22,9 +20,6 @@ type CurrencyHandler interface {
 
 	// DeleteCurrency обработчик для удаления валюты
 	DeleteCurrency(w http.ResponseWriter, r *http.Request)
-
-	// RegisterRoutes регистрирует маршруты в роутере
-	RegisterRoutes(router *mux.Router)
 }
 
 // HealthHandler определяет интерфейс для health-check обработчиков
@@ -34,7 +29,4 @@ type HealthHandler interface {
 
 	// Help обработчик для справки по API
 	Help(w http.ResponseWriter, r *http.Request)
-
-	// RegisterRoutes регистрирует маршруты в роутере
-	RegisterRoutes(router *mux.Router)
 }

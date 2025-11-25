@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"Currency-apiNew/internal/config"
+	_ "Currency-apiNew/internal/config"
 	"Currency-apiNew/internal/domain"
+	"Currency-apiNew/internal/migrator"
 	"database/sql"
 	"fmt"
 
@@ -15,8 +18,7 @@ type CurrencyRepoPostgreSQL struct {
 	logger *zap.Logger
 }
 
-// NewCurrencyRepoPostgreSQL создает новый экземпляр PostgreSQL репозитория
-func NewCurrencyRepoPostgreSQL(cfg domain.DatabaseConfig, logger *zap.Logger) (domain.CurrencyRepository, error) {
+func NewCurrencyRepoPostgreSQL(cfg config.DatabaseConfig, logger *zap.Logger) (domain.CurrencyRepository, error) {
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode)
 
@@ -25,12 +27,10 @@ func NewCurrencyRepoPostgreSQL(cfg domain.DatabaseConfig, logger *zap.Logger) (d
 		return nil, fmt.Errorf("ошибка подключения к БД: %w", err)
 	}
 
-	// Проверяем подключение
-	if err = db.Ping(); err != nil {
+	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("ошибка ping БД: %w", err)
 	}
 
-	// Устанавливаем максимальное количество соединений
 	db.SetMaxOpenConns(cfg.MaxConns)
 
 	logger.Info("Успешное подключение к PostgreSQL",
@@ -38,64 +38,22 @@ func NewCurrencyRepoPostgreSQL(cfg domain.DatabaseConfig, logger *zap.Logger) (d
 		zap.Int("port", cfg.Port),
 		zap.String("dbname", cfg.Name))
 
-	repo := &CurrencyRepoPostgreSQL{
-		db:     db,
-		logger: logger}
-
-	// Инициализируем таблицу
-	if err := repo.initTable(); err != nil {
-		return nil, fmt.Errorf("ошибка инициализации таблицы: %w", err)
-	}
-
-	// Загружаем дефолтные данные
-	if err := repo.loadDefaultRates(cfg.DefaultRates); err != nil {
-		return nil, fmt.Errorf("ошибка загрузки дефолтных курсов: %w", err)
-	}
-
-	return repo, nil
-}
-
-// initTable создает таблицу если она не существует
-func (repo *CurrencyRepoPostgreSQL) initTable() error {
-	query := `
-		CREATE TABLE IF NOT EXISTS currencies (
-			code VARCHAR(3) PRIMARY KEY,
-			rate DECIMAL(10,4) NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-		
-		CREATE INDEX IF NOT EXISTS idx_currencies_code ON currencies(code);
-	`
-
-	_, err := repo.db.Exec(query)
+	//
+	migrator, err := migrator.NewMigrator(cfg, logger)
 	if err != nil {
-		return fmt.Errorf("ошибка создания таблицы: %w", err)
+		return nil, fmt.Errorf("ошибка создания мигратора: %w", err)
+	}
+	defer migrator.Close()
+
+	// Выполняем миграции
+	if err := migrator.RunMigrations(); err != nil {
+		return nil, fmt.Errorf("ошибка выполнения миграций: %w", err)
 	}
 
-	repo.logger.Info("Таблица currencies успешно инициализирована")
-	return nil
-}
-
-// loadDefaultRates загружает дефолтные курсы валют
-func (repo *CurrencyRepoPostgreSQL) loadDefaultRates(defaultRates map[string]float64) error {
-	for code, rate := range defaultRates {
-		// Используем UPSERT (INSERT ... ON CONFLICT)
-		query := `
-			INSERT INTO currencies (code, rate) 
-			VALUES ($1, $2)
-			ON CONFLICT (code) DO NOTHING
-		`
-
-		_, err := repo.db.Exec(query, code, rate)
-		if err != nil {
-			return fmt.Errorf("ошибка загрузки дефолтного курса %s: %w", code, err)
-		}
-	}
-
-	repo.logger.Info("Дефолтные курсы валют загружены",
-		zap.Int("count", len(defaultRates)))
-	return nil
+	return &CurrencyRepoPostgreSQL{
+		db:     db,
+		logger: logger,
+	}, nil
 }
 
 // GetAll возвращает все валюты из БД

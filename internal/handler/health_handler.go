@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/mux"
+	//"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
 
@@ -51,9 +51,4 @@ GET  /                           - справка по API
 	}
 
 	writeJSONResponse(w, http.StatusOK, helpResponse)
-}
-
-func (h *HealthHandler) RegisterRoutes(router *mux.Router) {
-	router.HandleFunc("/health", h.HealthCheck).Methods("GET")
-	router.HandleFunc("/", h.Help).Methods("GET")
 }

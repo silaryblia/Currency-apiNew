@@ -13,3 +13,5 @@ type DatabaseConfig struct {
 	MaxConns     int
 	DefaultRates map[string]float64
 }
+
+// МОЖНО УДАЛИТЬ

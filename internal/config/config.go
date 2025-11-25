@@ -47,7 +47,7 @@ type DatabaseConfig struct {
 func NewDefaultConfig() *AppConfig {
 	return &AppConfig{
 		Server: ServerConfig{
-			Address:         "localhost:8082",
+			Address:         "localhost:8080",
 			ReadTimeout:     15 * time.Second,
 			WriteTimeout:    15 * time.Second,
 			IdleTimeout:     60 * time.Second,

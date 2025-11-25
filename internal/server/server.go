@@ -5,6 +5,7 @@ import (
 	"Currency-apiNew/internal/domain"
 	"Currency-apiNew/internal/handler"
 	"Currency-apiNew/internal/repository"
+	"Currency-apiNew/internal/router"
 	"Currency-apiNew/internal/service"
 	"Currency-apiNew/pkg/logger"
 	"context"
@@ -14,34 +15,23 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
 
 type Server struct {
 	server *http.Server
-	router *mux.Router
 	config *config.AppConfig
 	repo   domain.CurrencyRepository
 }
 
 func NewServer(cfg *config.AppConfig) *Server {
 	s := &Server{
-		router: mux.NewRouter(),
 		config: cfg,
 	}
 
 	// Настраиваем зависимости
 	if err := s.setupDependencies(); err != nil {
 		logger.Logger.Fatal("Ошибка настройки зависимостей", zap.Error(err))
-	}
-
-	s.server = &http.Server{
-		Addr:         cfg.Server.Address,
-		Handler:      s.router,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
 	return s
@@ -51,29 +41,35 @@ func (s *Server) setupDependencies() error {
 	logger.Logger.Info("Настройка зависимостей сервера",
 		zap.String("server_address", s.config.Server.Address))
 
-	// Middleware (порядок важен!)
-	s.router.Use(handler.RecoveryMiddleware(logger.Logger))
-	s.router.Use(handler.LoggingMiddleware(logger.Logger))
-
-	// СОЗДАЕМ POSTGRESQL РЕПОЗИТОРИЙ
-	dbConfig := domain.DatabaseConfig{
-		Host:         s.config.Database.Host,
-		Port:         s.config.Database.Port,
-		User:         s.config.Database.User,
-		Password:     s.config.Database.Password,
-		Name:         s.config.Database.Name,
-		SSLMode:      s.config.Database.SSLMode,
-		MaxConns:     s.config.Database.MaxConns,
-		DefaultRates: s.config.Currency.DefaultRates,
+	repo, err := repository.NewCurrencyRepoPostgreSQL(s.config.Database, logger.Logger)
+	if err != nil {
+		return fmt.Errorf("ошибка создания PostgreSQL репозитория: %w", err)
 	}
+	s.repo = repo
+
+	//// Middleware (порядок важен!)
+	//s.router.Use(handler.RecoveryMiddleware(logger.Logger))
+	//s.router.Use(handler.LoggingMiddleware(logger.Logger))
+	//
+	//// СОЗДАЕМ POSTGRESQL РЕПОЗИТОРИЙ
+	//dbConfig := domain.DatabaseConfig{
+	//	Host:         s.config.Database.Host,
+	//	Port:         s.config.Database.Port,
+	//	User:         s.config.Database.User,
+	//	Password:     s.config.Database.Password,
+	//	Name:         s.config.Database.Name,
+	//	SSLMode:      s.config.Database.SSLMode,
+	//	MaxConns:     s.config.Database.MaxConns,
+	//	DefaultRates: s.config.Currency.DefaultRates,
+	//}
 
 	// Инициализация слоев
 	// Repository слой (данные)
-	repo, err := repository.NewCurrencyRepoPostgreSQL(dbConfig, logger.Logger)
-	if err != nil {
-		return fmt.Errorf("Ошибка создания PostgreSQL репозитория: %w", err)
-	}
-	s.repo = repo
+	//repo, err := repository.NewCurrencyRepoPostgreSQL(dbConfig, logger.Logger)
+	//if err != nil {
+	//	return fmt.Errorf("Ошибка создания PostgreSQL репозитория: %w", err)
+	//}
+	//s.repo = repo
 
 	// Service слой (бизнес-логика)
 	currencyService := service.NewCurrencyService(repo, logger.Logger)
@@ -82,9 +78,18 @@ func (s *Server) setupDependencies() error {
 	currencyHandler := handler.NewCurrencyHandler(currencyService, logger.Logger)
 	healthHandler := handler.NewHealthHandler(logger.Logger) // Добавляем HealthHandler
 
-	// Настройка маршрутов
-	currencyHandler.RegisterRoutes(s.router)
-	healthHandler.RegisterRoutes(s.router) // Регистрируем health routes
+	// НАСТРАИВАЕМ РОУТЕР
+	appRouter := router.New(logger.Logger)
+	httpRouter := appRouter.Setup(currencyHandler, healthHandler)
+
+	// создаем HTTP сервер
+	s.server = &http.Server{
+		Addr:         s.config.Server.Address,
+		Handler:      httpRouter,
+		ReadTimeout:  s.config.Server.ReadTimeout,
+		WriteTimeout: s.config.Server.WriteTimeout,
+		IdleTimeout:  s.config.Server.IdleTimeout,
+	}
 
 	logger.Logger.Info("Все зависимости настроены",
 		zap.String("database", fmt.Sprintf("%s:%d", s.config.Database.Host, s.config.Database.Port)))

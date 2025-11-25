@@ -2,41 +2,45 @@ package main
 
 import (
 	"Currency-apiNew/internal/config"
-	"log"
-
 	"Currency-apiNew/internal/server"
 	"Currency-apiNew/pkg/logger"
 
 	"go.uber.org/zap"
 )
 
-func main() {
-	// Загружаем конфигурацию
-	cfgLoader := config.NewViperConfigLoader(".", "config")
-	cfg, err := cfgLoader.Load()
+// Структура для настроек логгера
+type LoggerSettings struct {
+	Level       string
+	Encoding    string
+	Development bool
+}
 
+func main() {
+	// Сначала загружаем конфигурацию БЕЗ логгера
+	cfgLoader := config.NewViperConfigLoader()
+	cfg, err := cfgLoader.Load()
 	if err != nil {
-		log.Printf("Не удалось загрузить конфиг: %v", err)
-		// Используем конфиг по умолчанию
-		cfg = config.NewDefaultConfig()
-		log.Println("Используется конфигурация по умолчанию")
+		// Используем стандартный лог для ошибок загрузки конфига
+		panic("Не удалось загрузить конфиг: " + err.Error())
 	}
 
-	// Инициализируем логгер с настройками из конфига
-	if err := logger.InitLogger(&cfg.Logger); err != nil {
-		log.Fatalf("Не удалось инициализировать логгер: %v", err)
+	// Инициализируем логгер
+	if err := logger.InitLogger(
+		cfg.Logger.Level,
+		cfg.Logger.Encoding,
+		cfg.Logger.Development,
+	); err != nil {
+		panic("Не удалось инициализировать логгер: " + err.Error())
 	}
 	defer logger.Logger.Sync()
 
 	logger.Logger.Info("Запуск приложения Currency API",
-		zap.String("version", "1.0.0"),
 		zap.String("server_address", cfg.Server.Address))
 
-	// Создаем и запускаем сервер
+	// Создаем и запускаем сервер с конфигом
 	srv := server.NewServer(cfg)
 
 	if err := srv.Start(); err != nil {
-
 		logger.Logger.Fatal("Ошибка при работе сервера", zap.Error(err))
 	}
 

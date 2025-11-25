@@ -21,16 +21,6 @@ type Currency struct {
 //	Exists(code string) (bool, error)
 //}
 
-// Request structures
-type CreateCurrencyRequest struct {
-	Code string  `json:"code" validate:"required,alpha,lowercase"`
-	Rate float64 `json:"rate" validate:"required,gt=0"`
-}
-
-type UpdateCurrencyRequest struct {
-	Rate float64 `json:"rate" validate:"required,gt=0"`
-}
-
 // Response structures
 type CurrencyResponse struct {
 	Code string  `json:"code"`
@@ -63,6 +53,7 @@ var (
 	ErrInvalidRate       = fmt.Errorf("курс должен быть положительным")
 	ErrDatabase          = fmt.Errorf("ошибка базы данных")
 	ErrDuplicateCurrency = fmt.Errorf("валюта уже существует")
+	ErrValidation        = fmt.Errorf("ошибка валидации")
 )
 
 /*

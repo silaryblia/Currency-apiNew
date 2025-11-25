@@ -20,10 +20,10 @@ type ViperConfigLoader struct {
 	configName string
 }
 
-func NewViperConfigLoader(configPath, configName string) *ViperConfigLoader {
+func NewViperConfigLoader() *ViperConfigLoader {
 	return &ViperConfigLoader{
-		configPath: configPath,
-		configName: configName,
+		configPath: "./internal/config",
+		configName: "config",
 	}
 }
 
@@ -43,7 +43,14 @@ func (l *ViperConfigLoader) Load() (*AppConfig, error) {
 		"aed": 20.00,
 	})
 
-	// Настройка Viper
+	viper.SetDefault("database.host", "localhost")
+	viper.SetDefault("database.port", 5432)
+	viper.SetDefault("database.user", "postgres")
+	viper.SetDefault("database.password", "password")
+	viper.SetDefault("database.name", "currency_db")
+	viper.SetDefault("database.ssl_mode", "disable")
+	viper.SetDefault("database.max_conns", 10)
+
 	if l.configPath != "" {
 		viper.AddConfigPath(l.configPath)
 	}
@@ -63,6 +70,12 @@ func (l *ViperConfigLoader) Load() (*AppConfig, error) {
 			return nil, fmt.Errorf("ошибка чтения конфиг файла: %w", err)
 		}
 		// Файл не найден, используем значения по умолчанию + env vars
+		fmt.Println("Конфиг файл не найден, используем значения по умолчанию")
+		// logger.Logger.Warn("Конфиг файл не найден, используем значения по умолчанию")
+	} else {
+		fmt.Printf("Конфиг файл загружен: %s\n", viper.ConfigFileUsed())
+		//logger.Logger.Info("Конфиг файл загружен",
+		//	zap.String("file", viper.ConfigFileUsed()))
 	}
 
 	var config AppConfig
